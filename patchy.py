@@ -15,23 +15,31 @@ MONTH_FILE = os.path.expanduser(DATA_DIR) + str(datetime.now().year) + "_" + str
 DAY_GOAL = 8.4
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
+use_py3status = False
+patched_in = False
 
 class Colors:
-    YELLOW = "\033[38;5;11m"
-    RED = "\033[38;5;9m"
-    GREEN = "\033[38;5;10m"
+    YELLOW = ["\033[38;5;11m", "#FFFF00"]
+    RED = ["\033[38;5;9m", "#FF0000"]
+    GREEN = ["\033[38;5;10m", "#00FF00"]
+    WHITE = ["\033[38;5;15m","#FFFFFF"]
+    LIGHT_GREEN = ["\033[38;5;155m","#b3f542"]
 
 
 def argparse(argv):
     patch = None
-    opts, args = getopt.getopt(argv,"hp")
+    opts, args = getopt.getopt(argv, "hps")
     for opt, arg in opts:
         if opt == '-h':
             print ('"patchy.py" prints the current balance')
             print ('"patchy.py -p" patches you in/out')
+            print ('"patchy.py -s" use py3status compatible output')
             sys.exit()
-        elif opt in ("-p", "patch"):
+        elif opt in ("-p"):
             patch = True
+        elif opt in ("-s"):
+            global use_py3status
+            use_py3status = True
     return patch
 
 
@@ -65,6 +73,8 @@ def load_balance():
                     end = datetime.now()
                     diff = (end - start).total_seconds() / 3600
                     balance = balance + diff
+                    global patched_in
+                    patched_in = True
     return balance
 
 
@@ -95,13 +105,32 @@ def print_status(balance):
     today = calculate_todays_balance()
     if today == -1:
         color = Colors.RED
-        print(color + "Fix yo patchings")
+        if use_py3status:
+            print("Fix yo patchings")
+            print(color[1])
+        else:
+            print(color[0] + "Fix yo patchings")
         exit(1)
     today_left = DAY_GOAL - today
     balance = balance + today
     if today_left <= 0:
-        color = Colors.GREEN
-    print(color + str(floor(today)) + ":" + str(floor((today*60)%60)) +
+        if patched_in:
+            color = Colors.GREEN
+        else:
+            color = Colors.WHITE
+    else:
+        if patched_in:
+            color = Colors.LIGHT_GREEN
+        else:
+            color = Colors.YELLOW
+    message = str(floor(today)) + ":" + str(floor((today*60)%60)) + \
+        "h (" + str(floor(today_left)) + ":" + str(floor((today_left*60)%60)) + "h), " + \
+        str(floor(balance)) + ":" + str(floor((balance*60)%60)) + "h"
+    if use_py3status:
+        print(message)
+        print(color[1])
+    else:
+        print(color[0] + str(floor(today)) + ":" + str(floor((today*60)%60)) +
           "h (" + str(floor(today_left)) + ":" + str(floor((today_left*60)%60)) + "h), " +
           str(floor(balance)) + ":" + str(floor((balance*60)%60)) + "h")
 
@@ -120,15 +149,18 @@ def delete_last_row(file):
 
 def patch():
     now = datetime.now().strftime(DATE_FORMAT)
+    if not os.path.isfile(MONTH_FILE):
+        open(MONTH_FILE, 'x')
     with open(MONTH_FILE, 'r+') as file:
         csvreader = csv.reader(file, delimiter=',')
         csvwriter = csv.writer(file, delimiter=',', lineterminator="\n")
         entries = list()
         for entry in csvreader:
             entries.append(entry)
-        start = datetime.strptime(entries[-1][0], DATE_FORMAT)
-        end = entries[-1][1]
-        if end != '':
+        if len(entries) > 0:
+            start = datetime.strptime(entries[-1][0], DATE_FORMAT)
+            end = entries[-1][1]
+        if len(entries) == 0 or end != '':
             new_start = datetime.now().strftime(DATE_FORMAT)
             entry = [new_start, '', '']
             csvwriter.writerow(entry)
