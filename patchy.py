@@ -112,7 +112,6 @@ def print_status(balance):
             print(color[0] + "Fix yo patchings")
         exit(1)
     today_left = DAY_GOAL - today
-    balance = balance + today
     if today_left <= 0:
         if patched_in:
             color = Colors.GREEN
