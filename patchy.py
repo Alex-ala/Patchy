@@ -141,8 +141,8 @@ def patch():
 
 
 def main(argv):
-    if not os.path.isdir(DATA_DIR):
-        os.mkdir(DATA_DIR)
+    if not os.path.isdir(os.path.expanduser(DATA_DIR)):
+        os.mkdir(os.path.expanduser(DATA_DIR))
     to_patch = argparse(argv)
     balance = load_balance()
     if to_patch is None:
