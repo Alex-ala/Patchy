@@ -5,6 +5,7 @@ import getopt
 import os
 from datetime import datetime, timedelta
 from math import floor
+from calendar import monthrange
 
 
 DATA_DIR = "~/.patchy/"
@@ -14,9 +15,20 @@ LAST_MONTH = (datetime.now().replace(day=1) - timedelta(days=1)).month
 MONTH_FILE = os.path.expanduser(DATA_DIR) + str(datetime.now().year) + "_" + str(THIS_MONTH) + ".csv"
 DAY_GOAL = 8.4
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S"
-
+PUBLIC_HOLIDAYS = [
+    datetime(year=datetime.now().year, month=1, day=2).date(),
+    datetime(year=datetime.now().year, month=4, day=7).date(),
+    datetime(year=datetime.now().year, month=4, day=10).date(),
+    datetime(year=datetime.now().year, month=5, day=18).date(),
+    datetime(year=datetime.now().year, month=5, day=29).date(),
+    datetime(year=datetime.now().year, month=8, day=1).date(),
+    datetime(year=datetime.now().year, month=12, day=25).date(),
+    datetime(year=datetime.now().year, month=12, day=26).date()
+]
+REDUCTION_PRE_HOLIDAY = 1
 use_py3status = False
 patched_in = False
+
 
 class Colors:
     YELLOW = ["\033[38;5;11m", "#FFFF00"]
@@ -28,18 +40,22 @@ class Colors:
 
 def argparse(argv):
     patch = None
-    opts, args = getopt.getopt(argv, "hps")
+    opts, args = getopt.getopt(argv, "hpsv")
     for opt, arg in opts:
         if opt == '-h':
             print ('"patchy.py" prints the current balance')
             print ('"patchy.py -p" patches you in/out')
             print ('"patchy.py -s" use py3status compatible output')
+            print ('"patchy.py -v" marks the current day as vacation')
             sys.exit()
         elif opt in ("-p"):
             patch = True
         elif opt in ("-s"):
             global use_py3status
             use_py3status = True
+        elif opt in ("-v"):
+            write_vacation()
+            sys.exit(0)
     return patch
 
 
@@ -63,18 +79,35 @@ def load_balance():
             else:
                 balance = float(last[1])
     if os.path.exists(MONTH_FILE):
+        patchings = dict()
         with open(MONTH_FILE, 'r') as file:
             csvreader = csv.reader(file, delimiter=',')
             for entry in csvreader:
-                if entry[2] != '':
-                    balance = balance + float(entry[2])
+                start = datetime.strptime(entry[0], DATE_FORMAT)
+                if entry[1] != '':
+                    end = datetime.strptime(entry[1], DATE_FORMAT)
                 else:
-                    start = datetime.strptime(entry[0], DATE_FORMAT)
                     end = datetime.now()
-                    diff = (end - start).total_seconds() / 3600
-                    balance = balance + diff
-                    global patched_in
-                    patched_in = True
+                patchings[start.date()] = [start, end]
+        for i in range(1, monthrange(datetime.now().year, datetime.now().month)[1]):
+            if i > datetime.now().day:
+                break
+            if datetime(datetime.now().year, datetime.now().month, i) in patchings:
+                start = patchings[i][0]
+                end = patchings[i][1]
+            else:
+                start = datetime.now().replace(day=i)
+            pensum = 0
+            if start.weekday() < 5:
+                pensum = DAY_GOAL
+            if start.date() in PUBLIC_HOLIDAYS:
+                pensum = 0
+            if (start + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
+                pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+            if datetime(start.year, start.month, i) in patchings:
+                balance = balance + ((patchings[i][1] - patchings[i][0]).total_seconds() / 3600) - pensum
+            else: balance = balance - pensum
+
     return balance
 
 
@@ -111,7 +144,15 @@ def print_status(balance):
         else:
             print(color[0] + "Fix yo patchings")
         exit(1)
-    today_left = DAY_GOAL - today
+    pensum = 0
+    if datetime.now().weekday() < 5:
+        pensum = DAY_GOAL
+    if datetime.now().date() in PUBLIC_HOLIDAYS:
+        pensum = 0
+    if (datetime.now() + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
+        pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+    today_left = pensum - today
+    balance = balance + today - pensum
     if today_left <= 0:
         if patched_in:
             color = Colors.GREEN
@@ -144,6 +185,25 @@ def delete_last_row(file):
         file.seek(pos, os.SEEK_SET)
         file.truncate()
         file.write("\n")
+
+
+def write_vacation():
+    now = datetime.now()
+    pensum = 0
+    if now.weekday() < 5:
+        pensum = DAY_GOAL
+    if now.date() in PUBLIC_HOLIDAYS:
+        pensum = 0
+    if (now + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
+        pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+    if not os.path.isfile(MONTH_FILE):
+        open(MONTH_FILE, 'x')
+    with open(MONTH_FILE, 'a') as file:
+        start = datetime.now().replace(hour=0, minute=0, second=0)
+        end = start + timedelta(hours=pensum)
+        csvwriter = csv.writer(file, delimiter=',', lineterminator="\n")
+        entry = [start.strftime(DATE_FORMAT), end.strftime(DATE_FORMAT), 0]
+        csvwriter.writerow(entry)
 
 
 def patch():
