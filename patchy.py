@@ -64,16 +64,12 @@ def argparse(argv):
             print('"patchy.py" prints the current balance')
             print('"patchy.py -p" patches you in/out')
             print('"patchy.py -s" use py3status compatible output')
-            print('"patchy.py -v" marks the current day as vacation')
             sys.exit()
         elif opt in ("-p"):
             patch = True
         elif opt in ("-s"):
             global use_py3status
             use_py3status = True
-        elif opt in ("-v"):
-            write_vacation()
-            sys.exit(0)
     return patch
 
 
@@ -87,7 +83,7 @@ def load_balance():
     balance = 0.0
     if os.path.exists(BALANCE_FILE):
         with open(BALANCE_FILE, 'r') as file:
-            csvreader = csv.reader(file,delimiter=',')
+            csvreader = csv.reader(file, delimiter=',')
             data = list()
             for entry in csvreader:
                 data.append(entry)
@@ -208,19 +204,6 @@ def delete_last_row(file):
         file.write("\n")
 
 
-def write_vacation():
-    now = datetime.now()
-    pensum = calculate_pensum(now)
-    if not os.path.isfile(MONTH_FILE):
-        open(MONTH_FILE, 'x')
-    with open(MONTH_FILE, 'a') as file:
-        start = datetime.now().replace(hour=0, minute=0, second=0)
-        end = start + timedelta(hours=pensum)
-        csvwriter = csv.writer(file, delimiter=',', lineterminator="\n")
-        entry = [start.strftime(DATE_FORMAT), end.strftime(DATE_FORMAT), 0]
-        csvwriter.writerow(entry)
-
-
 def patch():
     now = datetime.now().strftime(DATE_FORMAT)
     if not os.path.isfile(MONTH_FILE):
@@ -236,7 +219,7 @@ def patch():
             end = entries[-1][1]
         if len(entries) == 0 or end != '':
             new_start = datetime.now().strftime(DATE_FORMAT)
-            entry = [new_start, '', '']
+            entry = [new_start, '']
             csvwriter.writerow(entry)
         else:
             new_end = datetime.now()
