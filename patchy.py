@@ -13,6 +13,7 @@ BALANCE_FILE = os.path.expanduser(DATA_DIR) + "balance.csv"
 THIS_MONTH = int(datetime.now().month)
 LAST_MONTH = (datetime.now().replace(day=1) - timedelta(days=1)).month
 MONTH_FILE = os.path.expanduser(DATA_DIR) + str(datetime.now().year) + "_" + str(THIS_MONTH) + ".csv"
+HOLIDAY_FILE = os.path.expanduser(DATA_DIR) + "holidays.csv"
 DAY_GOAL = 8.4
 DATE_FORMAT = "%Y-%m-%d_%H-%M-%S"
 PUBLIC_HOLIDAYS = [
@@ -25,6 +26,7 @@ PUBLIC_HOLIDAYS = [
     datetime(year=datetime.now().year, month=12, day=25).date(),
     datetime(year=datetime.now().year, month=12, day=26).date()
 ]
+HOLIDAYS = []
 REDUCTION_PRE_HOLIDAY = 1
 use_py3status = False
 patched_in = False
@@ -34,8 +36,24 @@ class Colors:
     YELLOW = ["\033[38;5;11m", "#FFFF00"]
     RED = ["\033[38;5;9m", "#FF0000"]
     GREEN = ["\033[38;5;10m", "#00FF00"]
-    WHITE = ["\033[38;5;15m","#FFFFFF"]
-    LIGHT_GREEN = ["\033[38;5;155m","#b3f542"]
+    WHITE = ["\033[38;5;15m", "#FFFFFF"]
+    LIGHT_GREEN = ["\033[38;5;155m", "#b3f542"]
+
+
+def read_holidays():
+    if not os.path.isfile(HOLIDAY_FILE):
+        return []
+    with open(HOLIDAY_FILE, 'r') as file:
+        csvreader = csv.reader(file, delimiter=',')
+        for entry in csvreader:
+            if len(entry) == 1:
+                start = datetime.strptime(entry[0], DATE_FORMAT).replace(hour=0, minute=0, second=0, microsecond=0)
+                end = datetime.strptime(entry[0], DATE_FORMAT).replace(hour=23, minute=59, second=59, microsecond=999)
+                HOLIDAYS.append((start, end))
+            else:
+                start = datetime.strptime(entry[0], DATE_FORMAT)
+                end = datetime.strptime(entry[1], DATE_FORMAT)
+                HOLIDAYS.append((start, end))
 
 
 def argparse(argv):
@@ -43,10 +61,10 @@ def argparse(argv):
     opts, args = getopt.getopt(argv, "hpsv")
     for opt, arg in opts:
         if opt == '-h':
-            print ('"patchy.py" prints the current balance')
-            print ('"patchy.py -p" patches you in/out')
-            print ('"patchy.py -s" use py3status compatible output')
-            print ('"patchy.py -v" marks the current day as vacation')
+            print('"patchy.py" prints the current balance')
+            print('"patchy.py -p" patches you in/out')
+            print('"patchy.py -s" use py3status compatible output')
+            print('"patchy.py -v" marks the current day as vacation')
             sys.exit()
         elif opt in ("-p"):
             patch = True
@@ -88,27 +106,36 @@ def load_balance():
                     end = datetime.strptime(entry[1], DATE_FORMAT)
                 else:
                     end = datetime.now()
-                patchings[start.date()] = [start, end]
+                if start.date() in patchings:
+                    patchings[start.date()].append((start,end))
+                else:
+                    patchings[start.date()] = [(start, end)]
         for i in range(1, monthrange(datetime.now().year, datetime.now().month)[1]):
             if i > datetime.now().day:
                 break
-            if datetime(datetime.now().year, datetime.now().month, i) in patchings:
-                start = patchings[i][0]
-                end = patchings[i][1]
-            else:
-                start = datetime.now().replace(day=i)
-            pensum = 0
-            if start.weekday() < 5:
-                pensum = DAY_GOAL
-            if start.date() in PUBLIC_HOLIDAYS:
-                pensum = 0
-            if (start + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
-                pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
-            if datetime(start.year, start.month, i) in patchings:
-                balance = balance + ((patchings[i][1] - patchings[i][0]).total_seconds() / 3600) - pensum
-            else: balance = balance - pensum
+            d = datetime(datetime.now().year, datetime.now().month, i)
+            pensum = calculate_pensum(d)
+            if d not in patchings:
+                continue
+            for start, end in patchings[d]:
+                balance = balance + ((end - start).total_seconds() / 3600)
+            balance = balance - pensum
 
     return balance
+
+
+def calculate_pensum(d):
+    pensum = 0
+    if d.date() in PUBLIC_HOLIDAYS:
+        return 0
+    for start, end in HOLIDAYS:
+        if start <= d <= end:
+            return 0
+    if d.weekday() < 5:
+        pensum = DAY_GOAL
+    if (d + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
+        pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+    return pensum
 
 
 def calculate_todays_balance():
@@ -144,13 +171,7 @@ def print_status(balance):
         else:
             print(color[0] + "Fix yo patchings")
         exit(1)
-    pensum = 0
-    if datetime.now().weekday() < 5:
-        pensum = DAY_GOAL
-    if datetime.now().date() in PUBLIC_HOLIDAYS:
-        pensum = 0
-    if (datetime.now() + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
-        pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+    pensum = calculate_pensum(datetime.now())
     today_left = pensum - today
     balance = balance + today - pensum
     if today_left <= 0:
@@ -189,13 +210,7 @@ def delete_last_row(file):
 
 def write_vacation():
     now = datetime.now()
-    pensum = 0
-    if now.weekday() < 5:
-        pensum = DAY_GOAL
-    if now.date() in PUBLIC_HOLIDAYS:
-        pensum = 0
-    if (now + timedelta(days=1)).date() in PUBLIC_HOLIDAYS:
-        pensum = DAY_GOAL - REDUCTION_PRE_HOLIDAY
+    pensum = calculate_pensum(now)
     if not os.path.isfile(MONTH_FILE):
         open(MONTH_FILE, 'x')
     with open(MONTH_FILE, 'a') as file:
@@ -234,6 +249,7 @@ def patch():
 def main(argv):
     if not os.path.isdir(os.path.expanduser(DATA_DIR)):
         os.mkdir(os.path.expanduser(DATA_DIR))
+    read_holidays()
     to_patch = argparse(argv)
     balance = load_balance()
     if to_patch is None:
