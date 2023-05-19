@@ -111,9 +111,9 @@ def load_balance():
                 break
             d = datetime(datetime.now().year, datetime.now().month, i)
             pensum = calculate_pensum(d)
-            if d not in patchings:
+            if d.date() not in patchings:
                 continue
-            for start, end in patchings[d]:
+            for start, end in patchings[d.date()]:
                 balance = balance + ((end - start).total_seconds() / 3600)
             balance = balance - pensum
 
@@ -169,7 +169,6 @@ def print_status(balance):
         exit(1)
     pensum = calculate_pensum(datetime.now())
     today_left = pensum - today
-    balance = balance + today - pensum
     if today_left <= 0:
         if patched_in:
             color = Colors.GREEN
