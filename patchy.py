@@ -75,6 +75,19 @@ def argparse(argv):
 
 # Aggregates the last month and saves the resulting balance into balancefile
 def aggregate_last_month():
+    LAST_MONTH_FILE = os.path.expanduser(DATA_DIR) + str(datetime.now().year) + "_" + str(LAST_MONTH) + ".csv"
+    if os.path.exists(LAST_MONTH_FILE):
+        patchings = dict()
+        with open(LAST_MONTH_FILE, 'r') as file:
+            csvreader = csv.reader(file, delimiter=',')
+            data = list()
+            for entry in csvreader:
+                data.append(entry)
+            last = data[-1]
+            with open(BALANCE_FILE,'a') as file:
+                csvwriter = csv.writer(file, delimiter=',', lineterminator="\n")
+                csvwriter.writerow([LAST_MONTH, last[2]])
+            return float(last[2])
     return 0
 
 
@@ -179,16 +192,16 @@ def print_status(balance):
             color = Colors.LIGHT_GREEN
         else:
             color = Colors.YELLOW
-    message = str(floor(today)) + ":" + str(floor((today*60)%60)) + \
-        "h (" + str(floor(today_left)) + ":" + str(floor((today_left*60)%60)) + "h), " + \
-        str(floor(balance)) + ":" + str(floor((balance*60)%60)) + "h"
+    message = str(int(today)) + ":" + str(int((today*60)%60)) + \
+        "h (" + str(int(today_left)) + ":" + str(int((today_left*60)%60)) + "h), " + \
+        str(int(balance)) + ":" + str(int((abs(balance)*60)%60)) + "h"
     if use_py3status:
         print(message)
         print(color[1])
     else:
-        print(color[0] + str(floor(today)) + ":" + str(floor((today*60)%60)) +
-          "h (" + str(floor(today_left)) + ":" + str(floor((today_left*60)%60)) + "h), " +
-          str(floor(balance)) + ":" + str(floor((balance*60)%60)) + "h")
+        print(color[0] + str(int(today)) + ":" + str(int((today*60)%60)) +
+          "h (" + str(int(today_left)) + ":" + str(int((today_left*60)%60)) + "h), " +
+          str(int(balance)) + ":" + str(int((abs(balance)*60)%60)) + "h")
 
 
 def delete_last_row(file):
@@ -223,7 +236,9 @@ def patch():
         else:
             new_end = datetime.now()
             diff = (new_end - start).total_seconds() / 3600
-            entry = [start.strftime(DATE_FORMAT), new_end.strftime(DATE_FORMAT), diff]
+            balance = load_balance()
+            balance += calculate_todays_balance()
+            entry = [start.strftime(DATE_FORMAT), new_end.strftime(DATE_FORMAT), balance]
             delete_last_row(file)
             csvwriter.writerow(entry)
 
