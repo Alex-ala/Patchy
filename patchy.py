@@ -115,8 +115,10 @@ def load_balance():
                     end = datetime.strptime(entry[1], DATE_FORMAT)
                 else:
                     end = datetime.now()
+                    global patched_in
+                    patched_in = True
                 if start.date() in patchings:
-                    patchings[start.date()].append((start,end))
+                    patchings[start.date()].append((start, end))
                 else:
                     patchings[start.date()] = [(start, end)]
         for i in range(1, monthrange(datetime.now().year, datetime.now().month)[1]):
